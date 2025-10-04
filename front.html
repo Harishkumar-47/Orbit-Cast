@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>NASA Weather Probability Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: #f6f8fb;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .app-container {
+      max-width: 780px;
+      margin: 2rem auto;
+      background: #faf9f6;
+      border-radius: 10px;
+      padding: 2rem;
+      box-shadow: 0 2px 12px #ccc;
+    }
+    h1 {
+      margin-top: 0;
+      color: #3269e7;
+      font-size: 2rem;
+      text-align: center;
+    }
+    .flex-row {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .half {
+      flex: 1 1 340px;
+      min-width: 320px;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+    input[type="text"], input[type="date"], select, input[type="number"] {
+      margin-top: 0.15rem;
+      width: 100%;
+      padding: 0.45rem;
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    #map {
+      height: 220px;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      border: 1px solid #bbb;
+    }
+    .threshold-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .threshold-row input[type="number"] {
+      width: 80px;
+    }
+    button[type="submit"], .download-btn, .download-img-btn {
+      padding: 0.7rem 1.4rem;
+      background: #3269e7;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 0.7rem;
+    }
+    button[type="submit"]:disabled, .download-btn:disabled, .download-img-btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+    .results-section {
+      background: #e9f6ff;
+      margin-top: 2rem;
+      padding: 1rem;
+      border-radius: 6px;
+      animation: fadeIn 0.7s;
+    }
+    .results-section h2 {
+      margin-top: 0;
+      font-size: 1.2rem;
+    }
+    .summary-text {
+      margin-bottom: 1rem;
+      font-size: 1.06rem;
+      color: #194d7a;
+    }
+    .charts-flex {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .chart-box {
+      flex: 1 1 220px;
+      min-width: 220px;
+      background: #fafdff;
+      border-radius: 6px;
+      padding: 0.5rem 1rem 1rem 1rem;
+      box-shadow: 0 1px 4px #bfdcff33;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    .chart-metadata {
+      font-size: 0.95em;
+      color: #4a4a4a;
+      margin-bottom: 0.3em;
+    }
+    .download-btn, .download-img-btn {
+      margin-right: 0.5em;
+      background: #1976d2;
+    }
+    .download-img-btn {
+      background: #43a047;
+    }
+    .meta-table {
+      font-size: 0.97em;
+      width: 100%;
+      margin-bottom: 1em;
+      border-collapse: collapse;
+    }
+    .meta-table th, .meta-table td {
+      text-align: left;
+      padding: 0.18em 0.4em;
+    }
+    .meta-table th {
+      font-weight: 600;
+    }
+    .meta-table td {
+      font-style: italic;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @media (max-width: 800px) {
+      .flex-row { flex-direction: column; }
+      .half { min-width: unset; }
+      .charts-flex { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <h1>NASA Weather Probability Dashboard</h1>
+    <form id="weatherForm">
+      <div class="flex-row">
+        <div class="half">
+          <label>
+            Search Location:
+            <input type="text" id="locationInput" placeholder="e.g. Yosemite National Park, CA" autocomplete="off" />
+          </label>
+          <label>
+            Or drop a pin on the map:
+            <div id="map"></div>
+            <small>Selected lat/lon: <span id="latlonText">Not selected</span></small>
+          </label>
+        </div>
+        <div class="half">
+          <label>
+            Date of Interest:
+            <input type="date" id="dateInput" required />
+          </label>
+          <label>
+            Variables and Custom Thresholds:
+            <div id="thresholds">
+              <!-- dynamically generated -->
+            </div>
+          </label>
+        </div>
+      </div>
+      <button type="submit" id="submitBtn">Get Report</button>
+    </form>
+    <div id="resultsSection" class="results-section" style="display:none;">
+      <!-- Results go here -->
+    </div>
+  </div>
+  <script>
+    // 1. Map setup
+    let map = L.map('map').setView([37.8651, -119.5383], 6); // Yosemite center default
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    let pinMarker = null;
+    let selectedLatLng = null;
+    map.on('click', function(e) {
+      if (pinMarker) map.removeLayer(pinMarker);
+      pinMarker = L.marker(e.latlng).addTo(map);
+      selectedLatLng = e.latlng;
+      document.getElementById("latlonText").textContent =
+        e.latlng.lat.toFixed(4) + ", " + e.latlng.lng.toFixed(4);
+    });
+
+    // 2. Variable/thresholds setup (primary variables with metadata)
+    const VARIABLES = [
+      {
+        key: "temperature",
+        label: "Temperature",
+        unit: "°F",
+        default: 90,
+        direction: "above",
+        source: "NASA POWER",
+        source_link: "https://power.larc.nasa.gov/data-access-viewer/",
+      },
+      {
+        key: "precipitation",
+        label: "Precipitation",
+        unit: "in",
+        default: 0.5,
+        direction: "above",
+        source: "NASA POWER",
+        source_link: "https://power.larc.nasa.gov/data-access-viewer/",
+      },
+      {
+        key: "windspeed",
+        label: "Windspeed",
+        unit: "mph",
+        default: 20,
+        direction: "above",
+        source: "NASA MERRA-2",
+        source_link: "https://gmao.gsfc.nasa.gov/reanalysis/MERRA-2/",
+      },
+      {
+        key: "pm25",
+        label: "PM2.5 Air Quality",
+        unit: "μg/m³",
+        default: 35,
+        direction: "above",
+        source: "NASA MODIS",
+        source_link: "https://modis.gsfc.nasa.gov/data/dataprod/mod04.php",
+      }
+    ];
+    const thresholdsDiv = document.getElementById("thresholds");
+    VARIABLES.forEach(v => {
+      const row = document.createElement("div");
+      row.className = "threshold-row";
+      row.innerHTML = `
+        <input type="checkbox" id="cb_${v.key}" value="${v.key}" checked />
+        <label for="cb_${v.key}" style="font-weight:400;">${v.label} (${v.unit})</label>
+        <span style="font-size:0.9em;">${v.direction === "above" ? "≥" : "≤"}</span>
+        <input type="number" id="th_${v.key}" value="${v.default}" step="any" />
+      `;
+      thresholdsDiv.appendChild(row);
+    });
+
+    // 3. Basic location autocomplete using Nominatim
+    const locationInput = document.getElementById("locationInput");
+    locationInput.addEventListener('change', function() {
+      const query = locationInput.value.trim();
+      if (!query) return;
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.length > 0) {
+            const { lat, lon, display_name } = data[0];
+            map.setView([lat, lon], 9);
+            if (pinMarker) map.removeLayer(pinMarker);
+            pinMarker = L.marker([lat, lon]).addTo(map);
+            selectedLatLng = { lat: parseFloat(lat), lng: parseFloat(lon) };
+            document.getElementById("latlonText").textContent =
+              `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
+          }
+        });
+    });
+
+    // 4. Results generation (simulate NASA data for demo)
+    function simulateWeatherResults(vars, date, latlng) {
+      // Simulate values using date and lat/lon for demonstration
+      const rand = (seed) => Math.abs(Math.sin(seed) * 100) % 1;
+      const base = latlng ? (Math.abs(latlng.lat) + Math.abs(latlng.lng)) : 42.0;
+      let summary = [];
+      let charts = [];
+      let csvRows = ["Variable,Threshold,Unit,Probability (%),Source,Source Link"];
+      let jsonArr = [];
+      vars.forEach((v, idx) => {
+        // Simulate a probability between 8% and 82%
+        const prob = Math.round((rand(base + idx + parseInt(date.replace(/-/g,""))) * 0.7 + 0.08) * 100);
+        summary.push(
+          `${v.label} ${v.direction === "above" ? "≥" : "≤"} ${v.threshold}${v.unit}: <b>${prob}%</b> chance`
+        );
+        csvRows.push(`${v.label},${v.threshold},${v.unit},${prob},${v.source},${v.source_link}`);
+        jsonArr.push({
+          variable: v.label,
+          threshold: v.threshold,
+          unit: v.unit,
+          probability_percent: prob,
+          source: v.source,
+          source_link: v.source_link
+        });
+        // Simulate history data
+        const years = [];
+        const probs = [];
+        for (let y = 1990; y <= 2024; y++) {
+          years.push(y);
+          probs.push(Math.round(prob + (rand(base + idx + y) * 20 - 10)));
+        }
+        charts.push({
+          label: v.label,
+          unit: v.unit,
+          years,
+          probs,
+          metadata: {
+            source: v.source,
+            source_link: v.source_link,
+            variable: v.label,
+            unit: v.unit
+          }
+        });
+      });
+      return { summary, charts, csv: csvRows.join("\n"), json: jsonArr };
+    }
+
+    // 5. Form submit
+    document.getElementById("weatherForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const date = document.getElementById("dateInput").value;
+      if (!date) { alert("Please select a date."); return; }
+      // Gather selected variables & thresholds
+      const selectedVars = [];
+      VARIABLES.forEach(v => {
+        const cb = document.getElementById("cb_" + v.key);
+        const th = parseFloat(document.getElementById("th_" + v.key).value);
+        if (cb.checked) {
+          selectedVars.push({
+            ...v,
+            threshold: th
+          });
+        }
+      });
+      if (selectedVars.length === 0) { alert("Select at least one variable."); return; }
+      if (!selectedLatLng) { alert("Select a location using search or map."); return; }
+      // Simulate NASA data results
+      const { summary, charts, csv, json } = simulateWeatherResults(selectedVars, date, selectedLatLng);
+      // Render metadata table
+      let metaTableHtml = `<table class="meta-table"><tr><th>Variable</th><th>Unit</th><th>Source</th></tr>`;
+      selectedVars.forEach(v => {
+        metaTableHtml += `<tr><td>${v.label}</td><td>${v.unit}</td><td><a href="${v.source_link}" target="_blank">${v.source}</a></td></tr>`;
+      });
+      metaTableHtml += `</table>`;
+      // Render summary
+      let html = `<h2>Likelihood of Specified Conditions</h2>`;
+      html += metaTableHtml;
+      html += `<div class="summary-text">${summary.join("<br>")}</div>`;
+      // Render charts
+      html += `<div class="charts-flex">`;
+      charts.forEach((c, idx) => {
+        html += `<div class="chart-box">
+          <div class="chart-metadata">
+            <b>${c.label}</b> (${c.unit})<br>
+            Source: <a href="${c.metadata.source_link}" target="_blank">${c.metadata.source}</a>
+          </div>
+          <canvas id="chart${idx}" height="160"></canvas>
+          <button class="download-img-btn" id="downloadImg${idx}">Download Chart Image</button>
+        </div>`;
+      });
+      html += `</div>`;
+      // Download buttons
+      html += `<button class="download-btn" id="downloadCSV">Download CSV</button>
+               <button class="download-btn" id="downloadJSON">Download JSON</button>`;
+      // Show
+      const resultsSection = document.getElementById("resultsSection");
+      resultsSection.innerHTML = html;
+      resultsSection.style.display = "block";
+      // Draw charts & add download image
+      setTimeout(() => {
+        charts.forEach((c, idx) => {
+          const ctx = document.getElementById("chart"+idx).getContext("2d");
+          const chartObj = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: c.years,
+              datasets: [{
+                label: c.label + " probability (%)",
+                data: c.probs,
+                borderColor: "#1976d2",
+                backgroundColor: "rgba(25, 118, 210, 0.12)",
+                tension: 0.28,
+                fill: true,
+                pointRadius: 2
+              }]
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: "%" } },
+                x: { title: { display: true, text: "Year" } }
+              }
+            }
+          });
+          // Download chart as image
+          document.getElementById("downloadImg"+idx).onclick = () => {
+            const link = document.createElement("a");
+            link.href = chartObj.toBase64Image();
+            link.download = c.label.replace(/\s/g,'_') + "_probability_chart.png";
+            link.click();
+          };
+        });
+        // Download CSV
+        document.getElementById("downloadCSV").onclick = () => {
+          const blob = new Blob([csv], { type: "text/csv" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "nasa_weather_probability.csv";
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+        // Download JSON
+        document.getElementById("downloadJSON").onclick = () => {
+          const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "nasa_weather_probability.json";
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+      }, 100);
+    });
+  </script>
+</body>
+</html>
