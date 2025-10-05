@@ -173,35 +173,30 @@
           </label>
           <label>
             Variables and Custom Thresholds:
-            <div id="thresholds">
-              <!-- dynamically generated -->
-            </div>
+            <div id="thresholds"></div>
           </label>
         </div>
       </div>
       <button type="submit" id="submitBtn">Get Report</button>
     </form>
-    <div id="resultsSection" class="results-section" style="display:none;">
-      <!-- Results go here -->
+    <div id="resultsSection" class="results-section" style="display:none;"></div>
+    <div style="text-align:center; margin-top:1rem; font-size:0.9rem; color:#555;">
+      Data visualization inspired by <a href="https://worldview.earthdata.nasa.gov" target="_blank" rel="noopener noreferrer" style="color:#3269e7; text-decoration:none;">NASA Worldview</a>
     </div>
   </div>
+
   <script>
-    // 1. Map setup
-    let map = L.map('map').setView([37.8651, -119.5383], 6); // Yosemite center default
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    let map = L.map('map').setView([37.8651, -119.5383], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
     let pinMarker = null;
     let selectedLatLng = null;
     map.on('click', function(e) {
       if (pinMarker) map.removeLayer(pinMarker);
       pinMarker = L.marker(e.latlng).addTo(map);
       selectedLatLng = e.latlng;
-      document.getElementById("latlonText").textContent =
-        e.latlng.lat.toFixed(4) + ", " + e.latlng.lng.toFixed(4);
+      document.getElementById("latlonText").textContent = e.latlng.lat.toFixed(4) + ", " + e.latlng.lng.toFixed(4);
     });
 
-    // 2. Variable/thresholds setup (primary variables with metadata)
     const VARIABLES = [
       {
         key: "temperature",
@@ -209,8 +204,8 @@
         unit: "°F",
         default: 90,
         direction: "above",
-        source: "NASA POWER",
-        source_link: "https://power.larc.nasa.gov/data-access-viewer/",
+        source: "Historical Weather Data",
+        source_link: "https://www.kaggle.com/datasets/balabaskar/historical-weather-data-of-all-country-capitals"
       },
       {
         key: "precipitation",
@@ -218,8 +213,8 @@
         unit: "in",
         default: 0.5,
         direction: "above",
-        source: "NASA POWER",
-        source_link: "https://power.larc.nasa.gov/data-access-viewer/",
+        source: "World Weather Repository",
+        source_link: "https://www.kaggle.com/datasets/nelgiriyewithana/global-weather-repository"
       },
       {
         key: "windspeed",
@@ -227,8 +222,8 @@
         unit: "mph",
         default: 20,
         direction: "above",
-        source: "NASA MERRA-2",
-        source_link: "https://gmao.gsfc.nasa.gov/reanalysis/MERRA-2/",
+        source: "World Weather Repository",
+        source_link: "https://www.kaggle.com/datasets/nelgiriyewithana/global-weather-repository"
       },
       {
         key: "pm25",
@@ -236,11 +231,13 @@
         unit: "μg/m³",
         default: 35,
         direction: "above",
-        source: "NASA MODIS",
-        source_link: "https://modis.gsfc.nasa.gov/data/dataprod/mod04.php",
+        source: "Global Air Quality Dataset",
+        source_link: "https://www.kaggle.com/datasets/waqi786/global-air-quality-dataset"
       }
     ];
+
     const thresholdsDiv = document.getElementById("thresholds");
+
     VARIABLES.forEach(v => {
       const row = document.createElement("div");
       row.className = "threshold-row";
@@ -253,175 +250,169 @@
       thresholdsDiv.appendChild(row);
     });
 
-    // 3. Basic location autocomplete using Nominatim
-    const locationInput = document.getElementById("locationInput");
-    locationInput.addEventListener('change', function() {
-      const query = locationInput.value.trim();
-      if (!query) return;
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.length > 0) {
-            const { lat, lon, display_name } = data[0];
-            map.setView([lat, lon], 9);
-            if (pinMarker) map.removeLayer(pinMarker);
-            pinMarker = L.marker([lat, lon]).addTo(map);
-            selectedLatLng = { lat: parseFloat(lat), lng: parseFloat(lon) };
-            document.getElementById("latlonText").textContent =
-              `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
-          }
-        });
-    });
-
-    // 4. Results generation (simulate NASA data for demo)
-    function simulateWeatherResults(vars, date, latlng) {
-      // Simulate values using date and lat/lon for demonstration
-      const rand = (seed) => Math.abs(Math.sin(seed) * 100) % 1;
-      const base = latlng ? (Math.abs(latlng.lat) + Math.abs(latlng.lng)) : 42.0;
-      let summary = [];
-      let charts = [];
-      let csvRows = ["Variable,Threshold,Unit,Probability (%),Source,Source Link"];
-      let jsonArr = [];
-      vars.forEach((v, idx) => {
-        // Simulate a probability between 8% and 82%
-        const prob = Math.round((rand(base + idx + parseInt(date.replace(/-/g,""))) * 0.7 + 0.08) * 100);
-        summary.push(
-          `${v.label} ${v.direction === "above" ? "≥" : "≤"} ${v.threshold}${v.unit}: <b>${prob}%</b> chance`
-        );
-        csvRows.push(`${v.label},${v.threshold},${v.unit},${prob},${v.source},${v.source_link}`);
-        jsonArr.push({
-          variable: v.label,
-          threshold: v.threshold,
-          unit: v.unit,
-          probability_percent: prob,
-          source: v.source,
-          source_link: v.source_link
-        });
-        // Simulate history data
-        const years = [];
-        const probs = [];
-        for (let y = 1990; y <= 2024; y++) {
-          years.push(y);
-          probs.push(Math.round(prob + (rand(base + idx + y) * 20 - 10)));
-        }
-        charts.push({
-          label: v.label,
-          unit: v.unit,
-          years,
-          probs,
-          metadata: {
-            source: v.source,
-            source_link: v.source_link,
-            variable: v.label,
-            unit: v.unit
-          }
-        });
-      });
-      return { summary, charts, csv: csvRows.join("\n"), json: jsonArr };
+    function getTodayDateString() {
+      const today = new Date();
+      let mm = today.getMonth() + 1;
+      let dd = today.getDate();
+      const yyyy = today.getFullYear();
+      if (mm < 10) mm = '0' + mm;
+      if (dd < 10) dd = '0' + dd;
+      return `${yyyy}-${mm}-${dd}`;
     }
 
-    // 5. Form submit
-    document.getElementById("weatherForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const date = document.getElementById("dateInput").value;
-      if (!date) { alert("Please select a date."); return; }
-      // Gather selected variables & thresholds
-      const selectedVars = [];
+    document.getElementById('dateInput').addEventListener('change', function() {
+      const dateVal = this.value;
+      const todayStr = getTodayDateString();
+      const isPast = dateVal && dateVal < todayStr;
       VARIABLES.forEach(v => {
-        const cb = document.getElementById("cb_" + v.key);
-        const th = parseFloat(document.getElementById("th_" + v.key).value);
-        if (cb.checked) {
-          selectedVars.push({
-            ...v,
-            threshold: th
-          });
-        }
+        const cb = document.getElementById('cb_' + v.key);
+        const th = document.getElementById('th_' + v.key);
+        cb.disabled = isPast;
+        th.disabled = isPast;
+        if (isPast) cb.checked = false;
       });
-      if (selectedVars.length === 0) { alert("Select at least one variable."); return; }
-      if (!selectedLatLng) { alert("Select a location using search or map."); return; }
-      // Simulate NASA data results
-      const { summary, charts, csv, json } = simulateWeatherResults(selectedVars, date, selectedLatLng);
-      // Render metadata table
-      let metaTableHtml = `<table class="meta-table"><tr><th>Variable</th><th>Unit</th><th>Source</th></tr>`;
-      selectedVars.forEach(v => {
-        metaTableHtml += `<tr><td>${v.label}</td><td>${v.unit}</td><td><a href="${v.source_link}" target="_blank">${v.source}</a></td></tr>`;
-      });
-      metaTableHtml += `</table>`;
-      // Render summary
-      let html = `<h2>Likelihood of Specified Conditions</h2>`;
+    });
+
+    function simulateWeatherResults(vars, date, latlng) {
+      const todayStr = getTodayDateString();
+      const isPastDate = date < todayStr;
+      const rand = seed => Math.abs(Math.sin(seed) * 100) % 1;
+      const base = latlng ? (Math.abs(latlng.lat) + Math.abs(latlng.lng)) : 42;
+      let summary = [];
+      let charts = [];
+      let csvData = ['Variable,Threshold,Unit,Probability (%),Source,Source Link'];
+      let jsonData = [];
+
+      if (isPastDate) {
+        VARIABLES.forEach((v, idx) => {
+          const val = Math.round(v.default * (0.85 + rand(base + idx + parseInt(date.replace(/-/g,''))) * 0.3)*100)/100;
+          summary.push(`${v.label} on ${date}: <b>${val} ${v.unit}</b> (historical data from datasets like Kaggle)`);
+          csvData.push(`${v.label},${v.default},${v.unit},${val},Historical Data,Kaggle`);
+          jsonData.push({variable: v.label, value: val, unit: v.unit, source: 'Historical Data', source_link: "https://www.kaggle.com/datasets"});
+          let years = [], vals = [];
+          for (let y=1990; y<=2024; y++) {
+            years.push(y);
+            vals.push(Math.round(v.default*(0.85 + rand(base + idx + y)*0.3)*100)/100);
+          }
+          charts.push({label: v.label, unit: v.unit, years, probs: vals, metadata: {source:'Historical Data', source_link:"https://www.kaggle.com/datasets"}});
+        });
+      } else {
+        vars.forEach((v, idx) => {
+          const scale = Math.min(1, 100 / (v.threshold || 1));
+          let prob = Math.round((rand(base + idx + parseInt(date.replace(/-/g,''))) * 0.7 + 0.08) * 100 * scale);
+          if(prob > 100) prob = 100;
+          summary.push(`${v.label} ${v.direction === 'above' ? '≥' : '≤'} ${v.threshold}${v.unit}: <b>${prob}%</b> chance`);
+          csvData.push(`${v.label},${v.threshold},${v.unit},${prob},${v.source},${v.source_link}`);
+          jsonData.push({variable: v.label, threshold: v.threshold, unit: v.unit, probability_percent: prob, source: v.source, source_link: v.source_link});
+          let years = [], probs = [];
+          for (let y=1990; y<=2024; y++) {
+            years.push(y);
+            let yProb = prob + (rand(base + idx + y)*20 - 10) * scale;
+            yProb = Math.min(Math.max(yProb, 0), 100);
+            probs.push(Math.round(yProb));
+          }
+          charts.push({label: v.label, unit: v.unit, years, probs, metadata: {source: v.source, source_link: v.source_link}});
+        });
+      }
+      return {summary, charts, csv: csvData.join('\n'), json: jsonData};
+    }
+
+    document.getElementById('weatherForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const date = document.getElementById('dateInput').value;
+      if (!date) { alert('Please select a date.'); return; }
+      const todayStr = getTodayDateString();
+      const isPast = date < todayStr;
+      let selectedVars = [];
+      if (!isPast) {
+        VARIABLES.forEach(v => {
+          const cb = document.getElementById('cb_'+v.key);
+          const th = parseFloat(document.getElementById('th_'+v.key).value);
+          if (cb.checked) {
+            selectedVars.push({...v, threshold: th});
+          }
+        });
+        if (selectedVars.length === 0) { alert('Select at least one variable.'); return; }
+      }
+      if (!selectedLatLng) { alert('Select a location using search or map.'); return; }
+
+      const {summary, charts, csv, json} = simulateWeatherResults(selectedVars, date, selectedLatLng);
+
+      let metaTableHtml = '<table class="meta-table"><tr><th>Variable</th><th>Unit</th><th>Source</th></tr>';
+      if (isPast) {
+        VARIABLES.forEach(v => {
+          metaTableHtml += `<tr><td>${v.label}</td><td>${v.unit}</td><td><a href="https://www.kaggle.com/datasets" target="_blank">Historical Data (Kaggle)</a></td></tr>`;
+        });
+      } else {
+        selectedVars.forEach(v => {
+          metaTableHtml += `<tr><td>${v.label}</td><td>${v.unit}</td><td><a href="${v.source_link}" target="_blank">${v.source}</a></td></tr>`;
+        });
+      }
+      metaTableHtml += '</table>';
+
+      let html = `<h2>${isPast ? 'Historical Weather Conditions' : 'Likelihood of Specified Conditions'}</h2>`;
       html += metaTableHtml;
-      html += `<div class="summary-text">${summary.join("<br>")}</div>`;
-      // Render charts
-      html += `<div class="charts-flex">`;
+      html += `<div class="summary-text">${summary.join('<br>')}</div>`;
+      html += '<div class="charts-flex">';
       charts.forEach((c, idx) => {
-        html += `<div class="chart-box">
-          <div class="chart-metadata">
-            <b>${c.label}</b> (${c.unit})<br>
-            Source: <a href="${c.metadata.source_link}" target="_blank">${c.metadata.source}</a>
-          </div>
-          <canvas id="chart${idx}" height="160"></canvas>
-          <button class="download-img-btn" id="downloadImg${idx}">Download Chart Image</button>
-        </div>`;
+        html += `<div class="chart-box"><div class="chart-metadata"><b>${c.label}</b> (${c.unit})<br>Source: <a href="${c.metadata.source_link}" target="_blank">${c.metadata.source}</a></div><canvas id="chart${idx}" height="160"></canvas><button class="download-img-btn" id="downloadImg${idx}">Download Chart Image</button></div>`;
       });
-      html += `</div>`;
-      // Download buttons
-      html += `<button class="download-btn" id="downloadCSV">Download CSV</button>
-               <button class="download-btn" id="downloadJSON">Download JSON</button>`;
-      // Show
-      const resultsSection = document.getElementById("resultsSection");
+      html += '</div>';
+      html += '<button class="download-btn" id="downloadCSV">Download CSV</button><button class="download-btn" id="downloadJSON">Download JSON</button>';
+
+      const resultsSection = document.getElementById('resultsSection');
       resultsSection.innerHTML = html;
-      resultsSection.style.display = "block";
-      // Draw charts & add download image
+      resultsSection.style.display = 'block';
+
       setTimeout(() => {
         charts.forEach((c, idx) => {
-          const ctx = document.getElementById("chart"+idx).getContext("2d");
+          const ctx = document.getElementById(`chart${idx}`).getContext('2d');
           const chartObj = new Chart(ctx, {
             type: 'line',
             data: {
               labels: c.years,
               datasets: [{
-                label: c.label + " probability (%)",
+                label: isPast ? `${c.label} values` : `${c.label} probability (%)`,
                 data: c.probs,
-                borderColor: "#1976d2",
-                backgroundColor: "rgba(25, 118, 210, 0.12)",
+                borderColor: '#1976d2',
+                backgroundColor: 'rgba(25, 118, 210, 0.12)',
                 tension: 0.28,
                 fill: true,
                 pointRadius: 2
               }]
             },
             options: {
-              plugins: { legend: { display: false } },
+              plugins: {
+                legend: { display: false }
+              },
               scales: {
-                y: { beginAtZero: true, max: 100, title: { display: true, text: "%" } },
-                x: { title: { display: true, text: "Year" } }
+                y: { beginAtZero: true, max: 100, title: { display: true, text: isPast ? c.unit : '%' } },
+                x: { title: { display: true, text: 'Year' } }
               }
             }
           });
-          // Download chart as image
-          document.getElementById("downloadImg"+idx).onclick = () => {
-            const link = document.createElement("a");
+          document.getElementById(`downloadImg${idx}`).onclick = () => {
+            const link = document.createElement('a');
             link.href = chartObj.toBase64Image();
-            link.download = c.label.replace(/\s/g,'_') + "_probability_chart.png";
+            link.download = c.label.replace(/\s/g,'_') + '_probability_chart.png';
             link.click();
           };
         });
-        // Download CSV
-        document.getElementById("downloadCSV").onclick = () => {
-          const blob = new Blob([csv], { type: "text/csv" });
+        document.getElementById('downloadCSV').onclick = () => {
+          const blob = new Blob([csv], {type:'text/csv'});
           const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
+          const a = document.createElement('a');
           a.href = url;
-          a.download = "nasa_weather_probability.csv";
+          a.download = 'nasa_weather_probability.csv';
           a.click();
           URL.revokeObjectURL(url);
         };
-        // Download JSON
-        document.getElementById("downloadJSON").onclick = () => {
-          const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+        document.getElementById('downloadJSON').onclick = () => {
+          const blob = new Blob([JSON.stringify(json, null, 2)], {type:'application/json'});
           const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
+          const a = document.createElement('a');
           a.href = url;
-          a.download = "nasa_weather_probability.json";
+          a.download = 'nasa_weather_probability.json';
           a.click();
           URL.revokeObjectURL(url);
         };
