@@ -1,0 +1,41 @@
+{
+  "variables": {
+    "PRECTOTCORR": {
+      "label": "Rainfall",
+      "unit": "mm/day",
+      "threshold": 20,
+      "risk": "rainfall",
+      "icon": "rainfall.png"
+    },
+    "T2M": {
+      "label": "Temperature",
+      "unit": "°C",
+      "threshold": 35,
+      "risk": "heatwave",
+      "icon": "heatwave.png"
+    },
+    "WS2M": {
+      "label": "Wind Speed",
+      "unit": "m/s",
+      "threshold": 15,
+      "risk": "storm",
+      "icon": "wind.png"
+    },
+    "CLDT": {
+      "label": "Cloud Cover",
+      "unit": "%",
+      "threshold": 60,
+      "risk": "cloud",
+      "icon": "cloud.png"
+    }
+  }
+{
+  "region": "India",
+  "variable": "M2TMNXFLX_5_12_4_PRECTOTCORR",
+  "mean": 0.0,
+  "std_dev": 0.0,
+  "exceedance_pct": 0.0,
+  "risk_level": "✅ Low Risk"
+}
+
+}
